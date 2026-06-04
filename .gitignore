@@ -1,0 +1,29 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# PyInstaller
+build/
+dist/
+*.manifest
+
+# Runtime artifacts (generowane w %APPDATA%, ale ignoruj też lokalnie)
+config.json
+kancelaria.db
+kancelaria.log
+
+# Tesseract bundle / dane
+*.traineddata
+tesseract_bundle/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
