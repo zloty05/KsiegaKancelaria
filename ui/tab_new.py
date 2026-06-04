@@ -120,10 +120,9 @@ class NewTab(QWidget):
             return
         self._scanning = enabled
         if enabled:
+            # Bierzemy pod uwagę tylko pliki, które pojawią się PO włączeniu trybu.
+            # Pliki leżące już w _Nowe są celowo pomijane (nie przetwarzamy zaległości).
             self._watcher.start(self._config.folder_nowe)
-            # Przetwórz pliki już obecne w folderze.
-            for f in self._watcher.existing_files():
-                self._on_file_detected(f)
         else:
             self._watcher.stop()
         self._update_scan_button()

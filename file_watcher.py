@@ -94,16 +94,3 @@ class FolderWatcher:
             self._observer.join(timeout=5)
             self._observer = None
             logger.info("Watchdog zatrzymany")
-
-    def existing_files(self) -> list[str]:
-        """Zwraca istniejące już pliki PDF w folderze (do przetworzenia po starcie)."""
-        if not self._folder:
-            return []
-        folder = Path(self._folder)
-        if not folder.exists():
-            return []
-        return [
-            str(p)
-            for p in sorted(folder.iterdir())
-            if p.is_file() and p.suffix.lower() in WATCHED_EXTENSIONS
-        ]

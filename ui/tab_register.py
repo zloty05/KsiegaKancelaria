@@ -33,9 +33,11 @@ logger = logging.getLogger(__name__)
 KIERUNEK_PL = {"IN": "← przych.", "OUT": "→ wych."}
 
 # Kolumny wyświetlane w tabeli (klucz Pismo, nagłówek).
+# Klucz "_strony" jest wirtualny — składa stronę powodową i pozwaną.
 TABLE_COLUMNS = [
     ("data_pisma", "Data"),
     ("sygnatura", "Sygnatura"),
+    ("_strony", "Strony"),
     ("typ_pisma", "Typ pisma"),
     ("kierunek", "Kierunek"),
     ("nazwa_pliku", "Plik"),
@@ -105,7 +107,12 @@ class RegisterTab(QWidget):
         self.table.setRowCount(len(pisma))
         for r, p in enumerate(pisma):
             for c, (key, _) in enumerate(TABLE_COLUMNS):
-                val = getattr(p, key)
+                if key == "_strony":
+                    val = " / ".join(
+                        filter(None, [p.strona_powodowa, p.strona_pozwana])
+                    )
+                else:
+                    val = getattr(p, key)
                 if key == "kierunek":
                     val = KIERUNEK_PL.get(val, val)
                 item = QTableWidgetItem("" if val is None else str(val))
