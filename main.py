@@ -38,6 +38,31 @@ def setup_logging() -> None:
     )
 
 
+def apply_light_theme(app: "QApplication") -> None:
+    """Wymusza jasny, spójny motyw niezależnie od ciemnego motywu Windows.
+
+    Bez tego w trybie ciemnym Windows tekst pól (QLineEdit) i etykiet jest jasny
+    na jasnym tle — nieczytelny. Styl Fusion + jasna paleta dają stały wygląd.
+    """
+    from PyQt6.QtGui import QColor, QPalette
+
+    app.setStyle("Fusion")
+    pal = QPalette()
+    pal.setColor(QPalette.ColorRole.Window, QColor("#f5f6fa"))
+    pal.setColor(QPalette.ColorRole.WindowText, QColor("#2d3436"))
+    pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    pal.setColor(QPalette.ColorRole.AlternateBase, QColor("#eef0f5"))
+    pal.setColor(QPalette.ColorRole.Text, QColor("#2d3436"))
+    pal.setColor(QPalette.ColorRole.Button, QColor("#f5f6fa"))
+    pal.setColor(QPalette.ColorRole.ButtonText, QColor("#2d3436"))
+    pal.setColor(QPalette.ColorRole.ToolTipBase, QColor("#ffffff"))
+    pal.setColor(QPalette.ColorRole.ToolTipText, QColor("#2d3436"))
+    pal.setColor(QPalette.ColorRole.Highlight, QColor("#0984e3"))
+    pal.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    pal.setColor(QPalette.ColorRole.PlaceholderText, QColor("#8395a7"))
+    app.setPalette(pal)
+
+
 def main() -> int:
     setup_logging()
     logger = logging.getLogger("main")
@@ -47,6 +72,7 @@ def main() -> int:
     app.setApplicationName("Księga Kancelarii")
     app.setQuitOnLastWindowClosed(False)  # zamknięcie okna nie kończy procesu
     app.setWindowIcon(app_icon())
+    apply_light_theme(app)
 
     # Inicjalizacja danych.
     config = Config.load()

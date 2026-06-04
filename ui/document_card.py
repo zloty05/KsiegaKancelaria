@@ -60,6 +60,8 @@ class DocumentCard(QFrame):
         self._expanded = False
 
         self.setObjectName("documentCard")
+        # Jawne kolory tekstu i pól — niezależne od ciemnego/jasnego motywu Windows.
+        # Bez tego w ciemnym motywie tekst pól (QLineEdit) i etykiet jest biały na białym.
         self.setStyleSheet(
             """
             #documentCard {
@@ -67,8 +69,20 @@ class DocumentCard(QFrame):
                 border: 1px solid #b2bec3;
                 border-radius: 8px;
             }
+            #documentCard QLabel { color: #2d3436; }
             QLabel#fileName { font-weight: bold; font-size: 13px; color: #2d3436; }
             QLabel#folderLabel { color: #0984e3; }
+            #documentCard QLineEdit {
+                color: #2d3436;
+                background-color: #ffffff;
+                border: 1px solid #b2bec3;
+                border-radius: 4px;
+                padding: 4px 6px;
+                selection-background-color: #0984e3;
+                selection-color: #ffffff;
+            }
+            #documentCard QLineEdit:focus { border: 1px solid #0984e3; }
+            #documentCard QCheckBox { color: #2d3436; }
             """
         )
         self._build_processing_ui()
