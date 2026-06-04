@@ -1,0 +1,121 @@
+═══════════════════════════════════════════════════════════════
+  KSIĘGA KANCELARII — instrukcja uruchomienia (wersja testowa)
+═══════════════════════════════════════════════════════════════
+
+Aplikacja automatyzuje rejestr pism kancelarii: rozpoznaje skany pism
+sądowych (PDF), wyciąga z nich dane (sygnatura, sąd, strony, typ pisma)
+i porządkuje je w folderach spraw oraz w przeszukiwalnym rejestrze.
+
+Nie wymaga instalacji ani Pythona — wystarczy rozpakować i uruchomić.
+
+
+───────────────────────────────────────────────────────────────
+ 1. ROZPAKOWANIE
+───────────────────────────────────────────────────────────────
+
+- Rozpakuj cały folder "KsiegaKancelarii" w dowolne miejsce,
+  np. na Pulpit albo do C:\KsiegaKancelarii.
+- WAŻNE: nie uruchamiaj programu z wnętrza pliku ZIP — najpierw
+  rozpakuj do zwykłego folderu.
+
+
+───────────────────────────────────────────────────────────────
+ 2. PIERWSZE URUCHOMIENIE
+───────────────────────────────────────────────────────────────
+
+- Wejdź do folderu "KsiegaKancelarii" i kliknij dwukrotnie plik:
+
+        KsiegaKancelarii.exe
+
+- Windows może pokazać niebieskie okno "System Windows ochronił
+  Twój komputer" (bo program nie jest jeszcze podpisany cyfrowo).
+  To normalne dla wersji testowej. Kliknij:
+        "Więcej informacji"  →  "Uruchom mimo to"
+
+- Antywirus (np. ESET) może na chwilę zatrzymać program do
+  sprawdzenia — poczekaj kilka sekund, to standardowa kontrola.
+
+- Program NIE otwiera od razu okna — chowa się do zasobnika
+  systemowego (prawy dolny róg, przy zegarku). Szukaj ikony "§".
+  Może być schowana pod strzałką "pokaż ukryte ikony" ( ^ ).
+
+- Kliknij dwukrotnie ikonę "§", aby otworzyć okno aplikacji.
+
+
+───────────────────────────────────────────────────────────────
+ 3. USTAWIENIA (jednorazowo)
+───────────────────────────────────────────────────────────────
+
+W oknie programu wejdź w zakładkę  ⚙️ Ustawienia  i ustaw:
+
+  • Folder skanów (_Nowe)
+        Folder, do którego drukarka/skaner zapisuje skany pism.
+        Program będzie go obserwował.
+
+  • Główny folder spraw
+        Folder, w którym trzymasz sprawy. Program będzie tam
+        tworzył podfoldery spraw i segregował pisma.
+
+  • Klucz Anthropic API
+        Klucz do rozpoznawania treści pism. Otrzymasz go osobno.
+        Wklej go w to pole (przycisk "Pokaż" pozwala sprawdzić).
+
+  • Nazwa kancelarii — opcjonalnie.
+
+  • [ ] Uruchamiaj wraz z Windows — zaznacz, jeśli program ma
+        startować automatycznie po włączeniu komputera.
+
+Na końcu kliknij  💾 Zapisz ustawienia.
+
+
+───────────────────────────────────────────────────────────────
+ 4. JAK UŻYWAĆ
+───────────────────────────────────────────────────────────────
+
+PISMA PRZYCHODZĄCE (skany):
+  1. Zakładka  📥 Nowe  →  kliknij duży przycisk
+     "TRYB SKANOWANIA: WYŁĄCZONY", żeby go włączyć (zrobi się zielony).
+  2. Zeskanuj pismo do folderu skanów (lub wrzuć tam plik PDF).
+  3. Po chwili pojawi się karta z rozpoznanymi danymi.
+  4. Sprawdź / popraw pola i kliknij  ✅ Zatwierdź.
+     Pismo trafi do właściwego folderu sprawy i do rejestru.
+
+  Uwaga: program bierze pod uwagę tylko pliki, które pojawią się
+  PO włączeniu trybu skanowania. Pliki leżące tam wcześniej pomija.
+
+PISMA WYCHODZĄCE:
+  • Zakładka  📥 Nowe  →  przycisk "📤 Zarejestruj pismo wychodzące"
+    → wybierz plik (.docx lub .pdf). Możesz zaznaczyć "Drukuj".
+
+REJESTR:
+  • Zakładka  📋 Rejestr  — wszystkie pisma, wyszukiwanie,
+    otwieranie plików/folderów, eksport do Excela.
+
+
+───────────────────────────────────────────────────────────────
+ 5. ZAMYKANIE
+───────────────────────────────────────────────────────────────
+
+  • Zamknięcie okna krzyżykiem (X) NIE kończy programu — chowa go
+    do zasobnika (działa dalej w tle, obserwuje skany).
+  • Aby całkiem zamknąć: prawy klik na ikonę "§" w zasobniku
+    →  ✕ Zamknij.
+
+
+───────────────────────────────────────────────────────────────
+ 6. GDYBY COŚ NIE DZIAŁAŁO
+───────────────────────────────────────────────────────────────
+
+  • Karty pokazują puste pola / "Bez sygnatury":
+        sprawdź, czy klucz API jest wpisany w Ustawieniach
+        i czy komputer ma połączenie z internetem.
+
+  • Program się nie uruchamia:
+        upewnij się, że folder został w całości rozpakowany z ZIP
+        (a nie uruchamiany ze środka archiwum).
+
+  • W razie problemów przy testach zapisywany jest log:
+        C:\Users\<TwojaNazwa>\AppData\Roaming\KsiegaKancelarii\kancelaria.log
+        — prześlij go do mnie, pomoże zdiagnozować problem.
+
+═══════════════════════════════════════════════════════════════

@@ -59,10 +59,33 @@ class DocumentData:
     source_page: int = 0  # która strona dała wynik (1/2/3); 0 = brak
 
 
+def _bundled_tesseract() -> Optional[str]:
+    """Ścieżka do Tesseractu dołączonego do paczki PyInstaller (jeśli istnieje).
+
+    W paczce (sys.frozen) pliki leżą w sys._MEIPASS; .spec dołącza Tesseract do
+    podfolderu 'tesseract'. Ustawiamy też TESSDATA_PREFIX, by OCR znalazł pol.traineddata.
+    """
+    import sys
+
+    base = getattr(sys, "_MEIPASS", None)
+    if not base:
+        return None
+    exe = Path(base) / "tesseract" / "tesseract.exe"
+    if exe.exists():
+        tessdata = exe.parent / "tessdata"
+        if tessdata.exists():
+            os.environ.setdefault("TESSDATA_PREFIX", str(tessdata))
+        return str(exe)
+    return None
+
+
 def _resolve_tesseract(tesseract_path: str = "") -> Optional[str]:
-    """Ustala ścieżkę do tesseract.exe: jawna → PATH → typowe lokalizacje."""
+    """Ustala ścieżkę do tesseract.exe: jawna → paczka → PATH → typowe lokalizacje."""
     if tesseract_path and Path(tesseract_path).exists():
         return tesseract_path
+    bundled = _bundled_tesseract()
+    if bundled:
+        return bundled
     found = shutil.which("tesseract")
     if found:
         return found
