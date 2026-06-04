@@ -10,6 +10,16 @@ from __future__ import annotations
 import logging
 import sys
 
+# Użyj magazynu certyfikatów Windows do weryfikacji SSL. Dzięki temu połączenia
+# z Claude API działają przez antywirusy z inspekcją HTTPS (Norton, ESET, Kaspersky
+# itd.), które podstawiają własny certyfikat root — bez wyłączania ochrony.
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except Exception:  # noqa: BLE001 — brak truststore nie może blokować startu
+    pass
+
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 from config import LOG_PATH, Config
