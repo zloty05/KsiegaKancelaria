@@ -12,6 +12,9 @@ build/
 dist/
 *.manifest
 
+# Paczki dystrybucyjne (ZIP dla radcy)
+*.zip
+
 # Runtime artifacts (generowane w %APPDATA%, ale ignoruj też lokalnie)
 config.json
 kancelaria.db
