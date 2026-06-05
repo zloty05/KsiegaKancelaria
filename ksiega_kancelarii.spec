@@ -44,6 +44,22 @@ a = Analysis(
     noarchive=False,
 )
 
+# Usuń duplikaty: PyInstaller wykrywa biblioteki Tesseractu/ICU/Leptonica przez
+# pytesseract i kopiuje je do głównego _internal — a my dołączamy CAŁY bundle
+# Tesseractu osobno (datas → _internal/tesseract/). Bez tego filtra np.
+# libtesseract-5.dll (~97 MB) i libicudt75.dll (~30 MB) lądują w paczce dwa razy.
+# Aplikacja woła tesseract.exe wyłącznie z _internal/tesseract/, więc luźne kopie
+# w _internal/ są zbędne. Zostawiamy je tylko, gdy NIE ma ich w bundlu.
+if tess_dir and Path(tess_dir).exists():
+    _bundle_dlls = {
+        p.name.lower() for p in Path(tess_dir).rglob("*.dll")
+    }
+    a.binaries = [
+        b for b in a.binaries
+        if Path(b[0]).name.lower() not in _bundle_dlls
+    ]
+
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
