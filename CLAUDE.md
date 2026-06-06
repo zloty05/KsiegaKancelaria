@@ -65,7 +65,7 @@ ui/
   tab_settings.py      foldery, klucz API, autostart, ostrzeżenie o Tesseract
   document_card.py     karta zatwierdzenia (edytowalne pola, folder docelowy)
   processing_worker.py QRunnable — przetwarzanie poza wątkiem GUI
-ksiega_kancelarii.spec  PyInstaller (dołącza Tesseract, filtruje duplikaty DLL)
+ksiega_kancelarii.spec  PyInstaller (dołącza cały Tesseract; NIE filtruje DLL)
 ```
 
 ### Reguły, które łatwo złamać
@@ -96,12 +96,19 @@ Klucz API trzymany w config.json (nie w repo).
 #   tesseract_bundle/ to odchudzony Tesseract (tylko exe + DLL + pol/eng/osd)
 $env:TESSERACT_DIR="...\Księga_Kancelaria\tesseract_bundle"
 .venv\Scripts\pyinstaller.exe --noconfirm --clean ksiega_kancelarii.spec
-# wynik: dist\KsiegaKancelarii\ (~339 MB; ZIP ~134 MB)
+# wynik: dist\KsiegaKancelarii\ (~492 MB; ZIP ~186 MB)
 ```
 
 - Przed buildem ZAMKNIJ działający .exe (`Stop-Process KsiegaKancelarii`), bo blokuje pliki.
-- `.spec` filtruje zduplikowane DLL Tesseractu/ICU (libtesseract-5 ~97 MB, libicudt75 ~30 MB),
-  które PyInstaller kopiuje przez pytesseract — bez tego paczka rośnie o ~155 MB.
+  Czasem proces ma uprawnienia, których `Stop-Process` nie ubije — zamknij wtedy z traya
+  lub Menedżera zadań ręcznie. `--clean` potrafi paść na blokadzie `build\` (OneDrive) —
+  usuń wtedy `build\` i `dist\` ręcznie i buduj bez `--clean`.
+- **NIE filtrujemy DLL w `.spec`.** Próby usuwania „duplikatów" Tesseractu psuły paczkę:
+  raz wycięły `libffi-8.dll` Pythona (→ `DLL load failed while importing _ctypes`, pada OCR,
+  pliki-obrazy lądują w FALLBACK z pustymi polami), raz `libarchive-13.dll` i pół bundla
+  (→ `tesseract.exe` nie startuje). Pełna, cięższa paczka > mniejszy, kruchy ZIP. Jeśli
+  kiedyś wrócisz do odchudzania: testuj URUCHOMIENIE .exe na czystej maszynie po każdej
+  zmianie, bo venv tego nie wyłapie (tam DLL Pythona są na miejscu systemowo).
 - W paczce kod szuka Tesseractu w `sys._MEIPASS/tesseract` (`_bundled_tesseract`).
 
 ## Dystrybucja do radcy

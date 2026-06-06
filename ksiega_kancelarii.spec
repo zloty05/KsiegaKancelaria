@@ -44,21 +44,14 @@ a = Analysis(
     noarchive=False,
 )
 
-# Usuń duplikaty: PyInstaller wykrywa biblioteki Tesseractu/ICU/Leptonica przez
-# pytesseract i kopiuje je do głównego _internal — a my dołączamy CAŁY bundle
-# Tesseractu osobno (datas → _internal/tesseract/). Bez tego filtra np.
-# libtesseract-5.dll (~97 MB) i libicudt75.dll (~30 MB) lądują w paczce dwa razy.
-# Aplikacja woła tesseract.exe wyłącznie z _internal/tesseract/, więc luźne kopie
-# w _internal/ są zbędne. Zostawiamy je tylko, gdy NIE ma ich w bundlu.
-if tess_dir and Path(tess_dir).exists():
-    _bundle_dlls = {
-        p.name.lower() for p in Path(tess_dir).rglob("*.dll")
-    }
-    a.binaries = [
-        b for b in a.binaries
-        if Path(b[0]).name.lower() not in _bundle_dlls
-    ]
-
+# UWAGA: NIE filtrujemy DLL-i z paczki. Wcześniejsze próby usuwania "duplikatów"
+# Tesseractu (po nazwie / prefiksie / ścieżce) wielokrotnie wycinały pliki potrzebne
+# do działania — raz libffi-8.dll Pythona (→ "DLL load failed while importing _ctypes",
+# pada OCR), raz libarchive-13.dll i pół bundla Tesseractu (→ tesseract.exe nie startuje:
+# "nie znaleziono ... .dll"). Świadoma decyzja: pełna, cięższa, ale przewidywalnie
+# DZIAŁAJĄCA paczka jest ważniejsza niż mniejszy ZIP. PyInstaller sam dociąga komplet
+# zależności Tesseractu i Pythona do _internal/. Jeśli kiedyś wrócimy do odchudzania —
+# tylko z testem uruchomienia .exe na czystej maszynie po każdej zmianie.
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
