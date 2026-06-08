@@ -6,9 +6,9 @@ Przewodnik dla Claude Code po tym projekcie. Czytaj na początku każdej sesji.
 
 Desktopowa aplikacja **Windows (PyQt6)** dla kancelarii radcy prawnego. Automatyzuje
 prowadzenie księgi kancelaryjnej: rozpoznaje skany pism sądowych (PDF), wyciąga dane
-(sygnatura, sąd, strony, typ pisma, data) przez **Claude Haiku API**, segreguje pliki
-do folderów spraw i prowadzi przeszukiwalny rejestr SQLite z eksportem do Excela.
-Działa w zasobniku systemowym (tray). Cały interfejs po polsku.
+(sygnatura, sąd, **strona reprezentowana / strona przeciwna**, typ pisma, data) przez
+**Claude Haiku API**, segreguje pliki do folderów spraw i prowadzi przeszukiwalny rejestr
+SQLite z eksportem do Excela. Działa w zasobniku systemowym (tray). Cały interfejs po polsku.
 
 - **Repo:** https://github.com/zloty05/KsiegaKancelaria.git, branch `main`
 - **Ścieżka:** `C:\Users\zloty\OneDrive\PROJEKTY KZ 2026\Księga_Kancelaria`
@@ -44,12 +44,27 @@ anthropic 0.105 · openpyxl 3.1.5 · pywin32 312 · truststore 0.10.4 · pyinsta
   `C:\Program Files\Tesseract-OCR\tessdata\`. Wymagany tylko dla skanów-obrazów;
   PDF z warstwą tekstową działa bez niego.
 
+### Model danych pisma (pola wyciągane przez Claude)
+`DocumentData`/tabela `pisma`: `sygnatura`, `sad`, `typ_pisma`, `data_pisma`,
+**`strona_reprezentowana`**, **`strona_przeciwna`**.
+- **Strony to NIE powód/pozwany.** „Reprezentowana" = strona, którą reprezentuje
+  kancelaria (pełnomocnik); „przeciwna" = druga strona. Claude rozpoznaje to po
+  **nazwiskach radców** z configu (`nazwiska_radcow`) — nazwa kancelarii sama nie wystarcza,
+  bo OCR psuje polskie znaki (Radców→Radc�w), a nazwiska przeżywają. Gdy niejednoznaczne →
+  **oba pola null** (świadoma decyzja: nie zgadywać). Bez `nazwiska_radcow` w Ustawieniach
+  rozpoznawanie nie zadziała.
+- **`data_pisma`** = data SPORZĄDZENIA (nagłówek przy miejscowości), NIE daty z treści
+  (terminy, daty zgonu/faktur). Prompt to wymusza; dodatkowo `_fallback_data_pisma`
+  (regex na polskie daty słowne „19 maja 2026", odporny na OCR) działa, gdy Claude da null.
+- **Wcześniejsze nazwy pól** to `strona_powodowa`/`strona_pozwana` — w starych bazach
+  migrowane automatycznie (patrz `init_db`, `ALTER TABLE RENAME COLUMN`).
+
 ## Architektura
 
 ```
 config.py              Config (dataclass) + load/save config.json
 database.py            SQLite (tabela pisma) + CRUD + export_to_excel
-document_processor.py  pdfplumber → OCR (gdy <50 znaków) → Claude Haiku; zwraca DocumentData
+document_processor.py  pdfplumber → OCR (gdy <50 znaków) → Claude Haiku; scala strony, fallback dat
 folder_matcher.py      dopasowanie po sygnaturze/nazwisku; suggest/create folderów spraw
 file_watcher.py        watchdog → pyqtSignal (NIE dotyka GUI bezpośrednio)
 printer.py             druk: docx→PDF (Word COM) → ShellExecute; pdf bezpośrednio
@@ -62,7 +77,7 @@ ui/
   toast.py             ToastNotification (fade in/out, prawy dolny róg)
   tab_new.py           tryb skanowania + kolejka kart, przenoszenie plików, DB, toast
   tab_register.py      tabela, szukaj/filtruj, eksport Excel, menu kontekstowe
-  tab_settings.py      foldery, klucz API, autostart, ostrzeżenie o Tesseract
+  tab_settings.py      foldery, klucz API, nazwa kancelarii + nazwiska radców, autostart, Tesseract
   document_card.py     karta zatwierdzenia (edytowalne pola, folder docelowy)
   processing_worker.py QRunnable — przetwarzanie poza wątkiem GUI
 ksiega_kancelarii.spec  PyInstaller (dołącza cały Tesseract; NIE filtruje DLL)
@@ -77,6 +92,12 @@ ksiega_kancelarii.spec  PyInstaller (dołącza cały Tesseract; NIE filtruje DLL
   per-widget — paleta globalna załatwia sprawę.
 - **Skanowanie bierze tylko NOWE pliki** — pliki leżące w `_Nowe` przed włączeniem
   trybu są celowo pomijane (świadoma decyzja użytkownika; brak `existing_files`).
+- **Strony PDF się SCALAJĄ, nie nadpisują.** `process_document` pyta Claude osobno o każdą
+  stronę (do `MAX_PAGES=3`). Dane są w nagłówku str. 1; strony 2-3 zwracają zwykle null.
+  `_merge_data` uzupełnia tylko PUSTE pola — NIGDY nie wracać do `best = result` (kasowało
+  dobry wynik str. 1 pustą str. 2; objawiało się to pustymi kartami dla pism bez sygnatury).
+  Pętla przerywa się przez `_ma_komplet_danych` (data+typ + sygnatura lub obie strony) —
+  typowe pismo = 1 zapytanie zamiast 3. Bezpiecznik: gdy niekompletne, doczytuje kolejne.
 - Folder docelowy w karcie przelicza się z EDYTOWANYCH pól przy zatwierdzeniu
   (`_edited_data` w [document_card.py](ui/document_card.py)), o ile użytkownik nie ustawił
   folderu ręcznie.
@@ -84,7 +105,9 @@ ksiega_kancelarii.spec  PyInstaller (dołącza cały Tesseract; NIE filtruje DLL
 ## Dane runtime (poza repo)
 
 `%APPDATA%\KsiegaKancelarii\` — `config.json`, `kancelaria.db`, `kancelaria.log`.
-Klucz API trzymany w config.json (nie w repo).
+Klucz API trzymany w config.json (nie w repo). `config.json` ma też `nazwa_kancelarii`
+i `nazwiska_radcow` (potrzebne do rozpoznania strony reprezentowanej).
+`Config.load` filtruje nieznane pola → dokładanie nowych pól jest wstecznie bezpieczne.
 
 ## Komendy
 
@@ -116,9 +139,19 @@ $env:TESSERACT_DIR="...\Księga_Kancelaria\tesseract_bundle"
 `dist\KsiegaKancelarii\` + `INSTRUKCJA_DLA_RADCY.txt` → ZIP → WeTransfer/Dysk (za duże na mail).
 Klucz API wysyłać OSOBNO (jak hasło). Windows/ESET ostrzeże o niepodpisanym .exe
 („Uruchom mimo to") — zniknie dopiero z certyfikatem podpisywania kodu.
+- **Po instalacji radca MUSI wpisać w Ustawieniach** nazwę kancelarii i nazwiska radców
+  (np. `Chmielewska-Szylar, Majchrzak`) — bez tego pola strony zostają puste.
+- Jego stara baza zmigruje się sama przy pierwszym uruchomieniu (powodowa→reprezentowana).
+- **Pisma testowe radcy są w `przykłady/` (gitignore — dane osobowe).** Skany bez warstwy
+  tekstowej (idą przez OCR); dobre do testów dat i rozpoznawania stron.
 
 ## Stan / TODO
 
 - ✅ v1.0 działa: skanowanie, OCR, Claude, rejestr, eksport, druk, tray, paczka .exe
-- ✅ Wersja testowa wysłana radcy do oceny
-- Możliwe później: certyfikat podpisywania kodu; instalator (Inno Setup) zamiast ZIP.
+- ✅ Wersja testowa zaakceptowana przez radcę
+- ✅ v1.1: rozbicie stron (reprezentowana/przeciwna + rozpoznawanie po nazwiskach radców),
+  lepsze wykrywanie dat (prompt + fallback słowny), scalanie stron + stop po komplecie,
+  migracja bazy. Paczka przebudowana i przetestowana (start .exe OK).
+- Możliwe później: certyfikat podpisywania kodu; instalator (Inno Setup) zamiast ZIP;
+  fallback dat działa tylko gdy API odpowie — gdy całe wywołanie padnie (brak sieci),
+  data nie jest wyciągana z OCR (do rozważenia, jeśli radca zgłosi).
