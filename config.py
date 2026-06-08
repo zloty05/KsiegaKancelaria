@@ -36,6 +36,7 @@ class Config:
     folder_sprawy: str = r"C:\Kancelaria\Sprawy"
     anthropic_api_key: str = ""
     nazwa_kancelarii: str = ""
+    nazwiska_radcow: str = ""
     autostart: bool = True
     # Ścieżka do tesseract.exe; pusta = autodetekcja (PATH / Program Files).
     tesseract_path: str = ""

@@ -21,16 +21,31 @@ class WorkerSignals(QObject):
 class ProcessingWorker(QRunnable):
     """Przetwarza pojedynczy dokument w puli wątków (QThreadPool)."""
 
-    def __init__(self, file_path: str, api_key: str, tesseract_path: str = "") -> None:
+    def __init__(
+        self,
+        file_path: str,
+        api_key: str,
+        tesseract_path: str = "",
+        nazwa_kancelarii: str = "",
+        nazwiska_radcow: str = "",
+    ) -> None:
         super().__init__()
         self.file_path = file_path
         self.api_key = api_key
         self.tesseract_path = tesseract_path
+        self.nazwa_kancelarii = nazwa_kancelarii
+        self.nazwiska_radcow = nazwiska_radcow
         self.signals = WorkerSignals()
 
     def run(self) -> None:
         try:
-            data = process_document(self.file_path, self.api_key, self.tesseract_path)
+            data = process_document(
+                self.file_path,
+                self.api_key,
+                self.tesseract_path,
+                self.nazwa_kancelarii,
+                self.nazwiska_radcow,
+            )
             self.signals.finished.emit(self.file_path, data)
         except Exception as exc:  # noqa: BLE001 — zgłoś, nie wywracaj puli
             logger.exception("Błąd workera dla %s", self.file_path)

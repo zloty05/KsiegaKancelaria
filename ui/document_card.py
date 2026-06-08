@@ -143,13 +143,14 @@ class DocumentCard(QFrame):
         self.edit_sad = QLineEdit(data.sad or "")
         self.edit_typ = QLineEdit(data.typ_pisma or "")
         self.edit_data = QLineEdit(data.data_pisma or "")
-        strony = " / ".join(filter(None, [data.strona_powodowa, data.strona_pozwana]))
-        self.edit_strony = QLineEdit(strony)
+        self.edit_reprezentowana = QLineEdit(data.strona_reprezentowana or "")
+        self.edit_przeciwna = QLineEdit(data.strona_przeciwna or "")
         form.addRow("Sygnatura akt:", self.edit_sygnatura)
         form.addRow("Sąd:", self.edit_sad)
         form.addRow("Typ pisma:", self.edit_typ)
         form.addRow("Data pisma:", self.edit_data)
-        form.addRow("Strony:", self.edit_strony)
+        form.addRow("Strona reprezentowana:", self.edit_reprezentowana)
+        form.addRow("Strona przeciwna:", self.edit_przeciwna)
         layout.addLayout(form)
 
         layout.addWidget(QLabel("📁 Folder docelowy:"))
@@ -209,20 +210,20 @@ class DocumentCard(QFrame):
 
     def _edited_data(self) -> tuple[DocumentData, str, str]:
         """Buduje DocumentData z aktualnych (edytowalnych) pól karty."""
-        strony = self.edit_strony.text().strip()
-        powod, pozwany = (strony.split(" / ", 1) + [""])[:2] if strony else ("", "")
+        repr_ = self.edit_reprezentowana.text().strip()
+        przec = self.edit_przeciwna.text().strip()
         data = DocumentData(
             sygnatura=self.edit_sygnatura.text().strip() or None,
             sad=self.edit_sad.text().strip() or None,
             typ_pisma=self.edit_typ.text().strip() or None,
             data_pisma=self.edit_data.text().strip() or None,
-            strona_powodowa=powod.strip() or None,
-            strona_pozwana=pozwany.strip() or None,
+            strona_reprezentowana=repr_ or None,
+            strona_przeciwna=przec or None,
         )
-        return data, powod.strip(), pozwany.strip()
+        return data, repr_, przec
 
     def _on_approve(self) -> None:
-        edited, powod, pozwany = self._edited_data()
+        edited, repr_, przec = self._edited_data()
 
         # Jeśli użytkownik nie zmienił folderu ręcznie, przelicz propozycję na podstawie
         # poprawionych pól (np. dopiero teraz wpisana sygnatura/strony).
@@ -241,8 +242,8 @@ class DocumentCard(QFrame):
             "sad": edited.sad,
             "typ_pisma": edited.typ_pisma,
             "data_pisma": edited.data_pisma,
-            "strona_powodowa": powod or None,
-            "strona_pozwana": pozwany or None,
+            "strona_reprezentowana": repr_ or None,
+            "strona_przeciwna": przec or None,
             "kierunek": self.kierunek,
             "target_folder": target_folder,
             "drukuj": bool(getattr(self, "chk_print", None) and self.chk_print.isChecked()),

@@ -37,7 +37,8 @@ KIERUNEK_PL = {"IN": "← przych.", "OUT": "→ wych."}
 TABLE_COLUMNS = [
     ("data_pisma", "Data"),
     ("sygnatura", "Sygnatura"),
-    ("_strony", "Strony"),
+    ("strona_reprezentowana", "Reprezentowana"),
+    ("strona_przeciwna", "Przeciwna"),
     ("typ_pisma", "Typ pisma"),
     ("kierunek", "Kierunek"),
     ("nazwa_pliku", "Plik"),
@@ -107,12 +108,7 @@ class RegisterTab(QWidget):
         self.table.setRowCount(len(pisma))
         for r, p in enumerate(pisma):
             for c, (key, _) in enumerate(TABLE_COLUMNS):
-                if key == "_strony":
-                    val = " / ".join(
-                        filter(None, [p.strona_powodowa, p.strona_pozwana])
-                    )
-                else:
-                    val = getattr(p, key)
+                val = getattr(p, key)
                 if key == "kierunek":
                     val = KIERUNEK_PL.get(val, val)
                 item = QTableWidgetItem("" if val is None else str(val))

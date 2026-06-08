@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,21 +27,51 @@ MAX_TOKENS = 300
 MAX_PAGES = 3
 MIN_TEXT_LEN = 50  # poniżej tej długości tekstu uruchamiamy OCR
 
+# Polskie nazwy miesięcy w dopełniaczu → numer. Klucze zredukowane do ASCII
+# (bez ogonków), bo OCR psuje polskie znaki — porównujemy po _ascii_month().
+_MIESIACE = {
+    "stycznia": 1, "lutego": 2, "marca": 3, "kwietnia": 4,
+    "maja": 5, "czerwca": 6, "lipca": 7, "sierpnia": 8,
+    "wrzesnia": 9, "pazdziernika": 10, "listopada": 11, "grudnia": 12,
+    # OCR często gubi "ś"/"ź" w nazwach — warianty bez tych liter:
+    "wrzenia": 9, "padziernika": 10,
+}
+
 SYSTEM_PROMPT = """\
 Jesteś asystentem kancelarii prawnej. Wyciągasz dane z pism sądowych.
 Odpowiadaj WYŁĄCZNIE w formacie JSON, bez żadnego dodatkowego tekstu.
-Jeśli danych nie ma w tekście, użyj null."""
+Jeśli danych nie ma w tekście, użyj null.
+Tekst pochodzi z OCR i może mieć uszkodzone polskie znaki — interpretuj go mimo to."""
 
 USER_PROMPT_TEMPLATE = """\
-Wyciągnij dane z poniższego pisma sądowego i zwróć JSON:
+Wyciągnij dane z poniższego pisma sądowego i zwróć WYŁĄCZNIE JSON:
 {{
   "sygnatura": "sygnatura akt sprawy np. I C 123/24 lub null",
   "sad": "pełna nazwa sądu lub null",
-  "typ_pisma": "typ pisma np. Wyrok, Postanowienie, Wezwanie, Zawiadomienie lub null",
-  "data_pisma": "data w formacie YYYY-MM-DD lub null",
-  "strona_powodowa": "imię i nazwisko lub nazwa firmy powoda lub null",
-  "strona_pozwana": "imię i nazwisko lub nazwa firmy pozwanego lub null"
+  "typ_pisma": "typ pisma np. Wyrok, Postanowienie, Pozew, Wezwanie, Wniosek lub null",
+  "data_pisma": "data SPORZĄDZENIA pisma w formacie YYYY-MM-DD lub null",
+  "strona_reprezentowana": "osoba/podmiot reprezentowany przez naszą kancelarię lub null",
+  "strona_przeciwna": "druga strona (przeciwnik) lub null"
 }}
+
+ZASADY dla data_pisma:
+- To data SPORZĄDZENIA pisma, zwykle w NAGŁÓWKU obok miejscowości, w formacie
+  "Miejscowość, DD miesiąc YYYYr." (np. "Szprotawa, 19 maja 2026r.").
+- NIE bierz dat z TREŚCI: terminów płatności, dat zgonu ("zm. ..."), dat faktur
+  ("faktura z dnia ..."), dat odsetek ("od dnia ..."), terminów ("do dnia ...").
+- Jeśli w nagłówku jest kilka dat — wybierz tę przy miejscowości.
+
+ZASADY dla stron (KLUCZOWE):
+- Naszą kancelarię reprezentują radcowie: {nazwiska_radcow}
+  (kancelaria: {nazwa_kancelarii}).
+- Znajdź zwrot "reprezentowany/a przez", "repr. przez" lub "w imieniu" wskazujący,
+  przy KTÓREJ stronie stoją nasi radcowie (dopasuj po NAZWISKACH — nazwa kancelarii
+  bywa zniekształcona przez OCR).
+- Ta strona to "strona_reprezentowana", druga to "strona_przeciwna".
+- W polach podaj OSOBY/PODMIOTY z dokumentu, NIGDY nazwy naszej kancelarii ani
+  nazwisk naszych radców.
+- Jeśli NIE potrafisz jednoznacznie ustalić, którą stronę reprezentujemy —
+  ustaw OBA pola na null. NIE zgaduj.
 
 Tekst pisma:
 {tekst}"""
@@ -54,8 +85,8 @@ class DocumentData:
     sad: Optional[str] = None
     typ_pisma: Optional[str] = None
     data_pisma: Optional[str] = None
-    strona_powodowa: Optional[str] = None
-    strona_pozwana: Optional[str] = None
+    strona_reprezentowana: Optional[str] = None
+    strona_przeciwna: Optional[str] = None
     source_page: int = 0  # która strona dała wynik (1/2/3); 0 = brak
 
 
@@ -157,7 +188,41 @@ def _normalize(value) -> Optional[str]:
     return s
 
 
-def _analyze_text(text: str, api_key: str) -> Optional[DocumentData]:
+def _ascii_month(name: str) -> str:
+    """Redukuje nazwę miesiąca do ASCII (usuwa ogonki i znaki zastępcze OCR)."""
+    repl = str.maketrans("ąćęłńóśźż", "acelnoszz")
+    s = name.lower().translate(repl)
+    return "".join(ch for ch in s if ch.isalpha())
+
+
+# Polska data słowna: "19 maja 2026" (klasa miesiąca dopuszcza znak zastępczy OCR �).
+_DATA_SLOWNA = re.compile(
+    r"(\d{1,2})\s+([A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ�]+)\s+(\d{4})"
+)
+
+
+def _fallback_data_pisma(text: str) -> Optional[str]:
+    """Szuka daty SPORZĄDZENIA pisma w nagłówku (polska data słowna).
+
+    Skanuje tylko początek tekstu (nagłówek), by nie złapać dat z treści
+    (terminów, dat zgonu, dat faktur). Zwraca YYYY-MM-DD lub None.
+    """
+    head = text[:600]
+    for m in _DATA_SLOWNA.finditer(head):
+        day = int(m.group(1))
+        month = _MIESIACE.get(_ascii_month(m.group(2)))
+        year = int(m.group(3))
+        if month and 1 <= day <= 31 and 1900 <= year <= 2100:
+            return f"{year:04d}-{month:02d}-{day:02d}"
+    return None
+
+
+def _analyze_text(
+    text: str,
+    api_key: str,
+    nazwa_kancelarii: str = "",
+    nazwiska_radcow: str = "",
+) -> Optional[DocumentData]:
     """Wysyła tekst do Claude Haiku i zwraca DocumentData lub None przy błędzie."""
     if not api_key:
         logger.info("Brak klucza API — pomijam analizę Claude")
@@ -166,31 +231,72 @@ def _analyze_text(text: str, api_key: str) -> Optional[DocumentData]:
         import anthropic
 
         client = anthropic.Anthropic(api_key=api_key)
+        prompt = USER_PROMPT_TEMPLATE.format(
+            tekst=text[:6000],
+            nazwa_kancelarii=nazwa_kancelarii or "(brak danych)",
+            nazwiska_radcow=nazwiska_radcow or "(brak danych)",
+        )
         msg = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=SYSTEM_PROMPT,
-            messages=[
-                {"role": "user", "content": USER_PROMPT_TEMPLATE.format(tekst=text[:6000])}
-            ],
+            messages=[{"role": "user", "content": prompt}],
         )
         raw = "".join(block.text for block in msg.content if block.type == "text")
         data = _parse_claude_json(raw)
-        return DocumentData(
+        result = DocumentData(
             sygnatura=_normalize(data.get("sygnatura")),
             sad=_normalize(data.get("sad")),
             typ_pisma=_normalize(data.get("typ_pisma")),
             data_pisma=_normalize(data.get("data_pisma")),
-            strona_powodowa=_normalize(data.get("strona_powodowa")),
-            strona_pozwana=_normalize(data.get("strona_pozwana")),
+            strona_reprezentowana=_normalize(data.get("strona_reprezentowana")),
+            strona_przeciwna=_normalize(data.get("strona_przeciwna")),
         )
+        # Fallback: gdy Claude nie podał daty, spróbuj wyłapać ją z nagłówka.
+        if result.data_pisma is None:
+            result.data_pisma = _fallback_data_pisma(text)
+        return result
     except Exception as exc:  # noqa: BLE001 — błąd API nie może blokować aplikacji
         logger.warning("Analiza Claude nie powiodła się: %s", exc)
         return None
 
 
+def _merge_data(best: DocumentData, new: DocumentData, page_num: int) -> None:
+    """Uzupełnia puste pola `best` wartościami z `new` (nie nadpisuje istniejących).
+
+    Kolejne strony pisma zwykle zwracają mniej danych (często same null), więc
+    pierwsza strona, na której pole zostało wykryte, jest wiarygodna i zostaje.
+    """
+    for field in (
+        "sygnatura", "sad", "typ_pisma", "data_pisma",
+        "strona_reprezentowana", "strona_przeciwna",
+    ):
+        if getattr(best, field) is None and getattr(new, field) is not None:
+            setattr(best, field, getattr(new, field))
+            if best.source_page == 0:
+                best.source_page = page_num
+
+
+def _ma_komplet_danych(d: DocumentData) -> bool:
+    """Czy mamy dość danych, by przerwać skanowanie kolejnych stron.
+
+    Dane pisma są zwykle w nagłówku 1. strony. Uznajemy za komplet, gdy mamy
+    datę i typ oraz albo sygnaturę (klasyczne pismo sądowe), albo obie strony
+    (pisma procesowe/wezwania bez sygnatury). Bez tego doczytujemy kolejne strony.
+    """
+    if not (d.data_pisma and d.typ_pisma):
+        return False
+    if d.sygnatura:
+        return True
+    return bool(d.strona_reprezentowana and d.strona_przeciwna)
+
+
 def process_document(
-    file_path: str, api_key: str, tesseract_path: str = ""
+    file_path: str,
+    api_key: str,
+    tesseract_path: str = "",
+    nazwa_kancelarii: str = "",
+    nazwiska_radcow: str = "",
 ) -> DocumentData:
     """Przetwarza PDF i zwraca DocumentData.
 
@@ -215,12 +321,17 @@ def process_document(
                 text = _extract_page_text(page, tesseract_path)
                 if len(text.strip()) < 10:
                     continue
-                result = _analyze_text(text, api_key)
+                result = _analyze_text(
+                    text, api_key, nazwa_kancelarii, nazwiska_radcow
+                )
                 if result is None:
                     continue
-                result.source_page = page_num
-                best = result
-                if result.sygnatura:  # mamy sygnaturę → koniec
+                # Scal: uzupełniaj puste pola best danymi z tej strony, ale NIE
+                # nadpisuj już znalezionych (kolejne strony często zwracają null).
+                _merge_data(best, result, page_num)
+                # Komplet danych nagłówka → nie ma sensu OCR-ować i odpytywać dalej.
+                # Dane pisma są zwykle na 1. stronie; kolejne strony to ciąg treści.
+                if _ma_komplet_danych(best):
                     break
     except Exception as exc:  # noqa: BLE001
         logger.error("Błąd przetwarzania PDF %s: %s", file_path, exc)

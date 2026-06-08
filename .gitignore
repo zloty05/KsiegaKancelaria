@@ -24,6 +24,10 @@ kancelaria.log
 *.traineddata
 tesseract_bundle/
 
+# Przykładowe pisma radcy (dane osobowe — NIE commitować)
+przykłady/
+wynik_testu.txt
+
 # IDE / OS
 .vscode/
 .idea/

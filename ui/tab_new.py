@@ -140,7 +140,11 @@ class NewTab(QWidget):
         self._add_card(card)
 
         worker = ProcessingWorker(
-            file_path, self._config.anthropic_api_key, self._config.tesseract_path
+            file_path,
+            self._config.anthropic_api_key,
+            self._config.tesseract_path,
+            self._config.nazwa_kancelarii,
+            self._config.nazwiska_radcow,
         )
         worker.signals.finished.connect(self._on_processing_finished)
         self._pool.start(worker)
@@ -210,8 +214,8 @@ class NewTab(QWidget):
             sygnatura=payload["sygnatura"],
             sad=payload["sad"],
             typ_pisma=payload["typ_pisma"],
-            strona_powodowa=payload["strona_powodowa"],
-            strona_pozwana=payload["strona_pozwana"],
+            strona_reprezentowana=payload["strona_reprezentowana"],
+            strona_przeciwna=payload["strona_przeciwna"],
             kierunek=payload["kierunek"],
             sciezka_pliku=final_path,
             nazwa_pliku=nazwa_pliku,
@@ -284,7 +288,11 @@ class NewTab(QWidget):
         # PDF można przetworzyć; docx — pusta karta do ręcznego wypełnienia.
         if file_path.lower().endswith(".pdf"):
             worker = ProcessingWorker(
-                file_path, self._config.anthropic_api_key, self._config.tesseract_path
+                file_path,
+                self._config.anthropic_api_key,
+                self._config.tesseract_path,
+                self._config.nazwa_kancelarii,
+                self._config.nazwiska_radcow,
             )
             worker.signals.finished.connect(self._on_processing_finished)
             self._pool.start(worker)

@@ -2,7 +2,7 @@
 
 Logika:
   1. Szukaj folderu, którego nazwa zawiera sygnaturę (z `/`→`_`).
-  2. W razie braku — folder zawierający nazwisko strony powodowej/pozwanej.
+  2. W razie braku — folder zawierający nazwisko strony reprezentowanej/przeciwnej.
   3. Gdy znaleziono → zwróć podfolder przychodzące\\ lub wychodzące\\.
   4. Gdy nie znaleziono → suggest_new_folder().
 """
@@ -67,7 +67,7 @@ def find_matching_folder(
                     return str(d / sub)
 
     # 2) Dopasowanie po nazwisku strony.
-    nazwiska = [s for s in (data.strona_powodowa, data.strona_pozwana) if s]
+    nazwiska = [s for s in (data.strona_reprezentowana, data.strona_przeciwna) if s]
     for nazwisko in nazwiska:
         key = sanitize(nazwisko).lower()
         if not key:
@@ -90,7 +90,7 @@ def suggest_new_folder(data: DocumentData, sprawy_root: str, kierunek: str = "IN
         if m:
             rok = m.group(1)
 
-    nazwa_strony = data.strona_powodowa or data.strona_pozwana or "Nieznana_strona"
+    nazwa_strony = data.strona_reprezentowana or data.strona_przeciwna or "Nieznana_strona"
     nazwa_strony = sanitize(nazwa_strony) or "Nieznana_strona"
 
     if data.sygnatura:

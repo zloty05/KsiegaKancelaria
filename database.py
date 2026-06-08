@@ -25,8 +25,8 @@ COLUMNS = [
     "sygnatura",
     "sad",
     "typ_pisma",
-    "strona_powodowa",
-    "strona_pozwana",
+    "strona_reprezentowana",
+    "strona_przeciwna",
     "kierunek",
     "sciezka_pliku",
     "nazwa_pliku",
@@ -40,8 +40,8 @@ EXCEL_HEADERS = {
     "sygnatura": "Sygnatura akt",
     "sad": "Sąd",
     "typ_pisma": "Typ pisma",
-    "strona_powodowa": "Strona powodowa",
-    "strona_pozwana": "Strona pozwana",
+    "strona_reprezentowana": "Strona reprezentowana",
+    "strona_przeciwna": "Strona przeciwna",
     "kierunek": "Kierunek",
     "sciezka_pliku": "Ścieżka pliku",
     "nazwa_pliku": "Nazwa pliku",
@@ -58,8 +58,8 @@ class Pismo:
     sygnatura: Optional[str]
     sad: Optional[str]
     typ_pisma: Optional[str]
-    strona_powodowa: Optional[str]
-    strona_pozwana: Optional[str]
+    strona_reprezentowana: Optional[str]
+    strona_przeciwna: Optional[str]
     kierunek: str  # 'IN' lub 'OUT'
     sciezka_pliku: Optional[str]
     nazwa_pliku: Optional[str]
@@ -83,14 +83,24 @@ def init_db(db_path: Path = DB_PATH) -> None:
                 sygnatura TEXT,
                 sad TEXT,
                 typ_pisma TEXT,
-                strona_powodowa TEXT,
-                strona_pozwana TEXT,
+                strona_reprezentowana TEXT,
+                strona_przeciwna TEXT,
                 kierunek TEXT NOT NULL CHECK(kierunek IN ('IN', 'OUT')),
                 sciezka_pliku TEXT,
                 nazwa_pliku TEXT
             )
             """
         )
+        # Migracja starszych baz: kolumny powodowa/pozwana → reprezentowana/przeciwna.
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(pisma)")]
+        if "strona_powodowa" in cols and "strona_reprezentowana" not in cols:
+            conn.execute(
+                "ALTER TABLE pisma RENAME COLUMN strona_powodowa TO strona_reprezentowana"
+            )
+        if "strona_pozwana" in cols and "strona_przeciwna" not in cols:
+            conn.execute(
+                "ALTER TABLE pisma RENAME COLUMN strona_pozwana TO strona_przeciwna"
+            )
         conn.commit()
     logger.info("Baza danych zainicjalizowana: %s", db_path)
 
@@ -101,8 +111,8 @@ def add_pismo(
     sygnatura: Optional[str],
     sad: Optional[str],
     typ_pisma: Optional[str],
-    strona_powodowa: Optional[str],
-    strona_pozwana: Optional[str],
+    strona_reprezentowana: Optional[str],
+    strona_przeciwna: Optional[str],
     kierunek: str,
     sciezka_pliku: Optional[str],
     nazwa_pliku: Optional[str],
@@ -117,7 +127,7 @@ def add_pismo(
             """
             INSERT INTO pisma (
                 data_wpisu, data_pisma, sygnatura, sad, typ_pisma,
-                strona_powodowa, strona_pozwana, kierunek, sciezka_pliku, nazwa_pliku
+                strona_reprezentowana, strona_przeciwna, kierunek, sciezka_pliku, nazwa_pliku
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -126,8 +136,8 @@ def add_pismo(
                 sygnatura,
                 sad,
                 typ_pisma,
-                strona_powodowa,
-                strona_pozwana,
+                strona_reprezentowana,
+                strona_przeciwna,
                 kierunek,
                 sciezka_pliku,
                 nazwa_pliku,
@@ -158,7 +168,7 @@ def search_pisma(query: str, db_path: Path = DB_PATH) -> list[Pismo]:
             """
             SELECT * FROM pisma
             WHERE sygnatura LIKE ? OR sad LIKE ? OR typ_pisma LIKE ?
-               OR strona_powodowa LIKE ? OR strona_pozwana LIKE ? OR nazwa_pliku LIKE ?
+               OR strona_reprezentowana LIKE ? OR strona_przeciwna LIKE ? OR nazwa_pliku LIKE ?
             ORDER BY id DESC
             """,
             (like, like, like, like, like, like),

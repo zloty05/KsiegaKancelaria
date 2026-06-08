@@ -87,6 +87,10 @@ class SettingsTab(QWidget):
         layout.addWidget(QLabel("Nazwa kancelarii:"))
         self.edit_nazwa = QLineEdit()
         layout.addWidget(self.edit_nazwa)
+        layout.addWidget(QLabel("Nazwiska radców (pełnomocników):"))
+        self.edit_nazwiska = QLineEdit()
+        self.edit_nazwiska.setPlaceholderText("np. Chmielewska-Szylar, Majchrzak")
+        layout.addWidget(self.edit_nazwiska)
 
         layout.addWidget(_separator())
 
@@ -144,6 +148,7 @@ class SettingsTab(QWidget):
         self.edit_folder_sprawy.setText(c.folder_sprawy)
         self.edit_api_key.setText(c.anthropic_api_key)
         self.edit_nazwa.setText(c.nazwa_kancelarii)
+        self.edit_nazwiska.setText(c.nazwiska_radcow)
         self.chk_autostart.setChecked(c.autostart)
         self._refresh_tesseract_warning()
 
@@ -167,6 +172,7 @@ class SettingsTab(QWidget):
         c.folder_sprawy = self.edit_folder_sprawy.text().strip()
         c.anthropic_api_key = self.edit_api_key.text().strip()
         c.nazwa_kancelarii = self.edit_nazwa.text().strip()
+        c.nazwiska_radcow = self.edit_nazwiska.text().strip()
         c.autostart = self.chk_autostart.isChecked()
 
         try:
