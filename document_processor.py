@@ -55,11 +55,13 @@ Wyciągnij dane z poniższego pisma sądowego i zwróć WYŁĄCZNIE JSON:
 }}
 
 ZASADY dla data_pisma:
-- To data SPORZĄDZENIA pisma, zwykle w NAGŁÓWKU obok miejscowości, w formacie
-  "Miejscowość, DD miesiąc YYYYr." (np. "Szprotawa, 19 maja 2026r.").
-- NIE bierz dat z TREŚCI: terminów płatności, dat zgonu ("zm. ..."), dat faktur
-  ("faktura z dnia ..."), dat odsetek ("od dnia ..."), terminów ("do dnia ...").
-- Jeśli w nagłówku jest kilka dat — wybierz tę przy miejscowości.
+- To data SPORZĄDZENIA/WYSŁANIA pisma — ZAWSZE na POCZĄTKU dokumentu: w prawym
+  górnym rogu, w nagłówku obok miejscowości lub w pierwszym zdaniu. Bierz
+  PIERWSZĄ datę idąc od góry. Format dowolny: "13-04-2026", "13.04.2026",
+  "2026-04-13" lub słowny "13 kwietnia 2026r.".
+- NIE bierz dat z TREŚCI: terminów płatności, rat, tabel kosztów, dat zgonu
+  ("zm. ..."), dat faktur, dat odsetek ("od dnia ..."), terminów ("do dnia ...").
+- Jeśli na początku jest kilka dat — wybierz najwcześniej występującą (najwyżej).
 
 ZASADY dla stron (KLUCZOWE):
 - Naszą kancelarię reprezentują radcowie: {nazwiska_radcow}
@@ -195,26 +197,67 @@ def _ascii_month(name: str) -> str:
     return "".join(ch for ch in s if ch.isalpha())
 
 
+# Okno nagłówka: data SPORZĄDZENIA jest na początku pisma (prawy górny róg,
+# nagłówek lub pierwsze zdanie). Skanujemy tylko tyle, by nie sięgnąć treści,
+# gdzie roją się daty-pułapki (terminy, raty, tabele kosztów, daty wyroków).
+_HEAD_LEN = 500
+
 # Polska data słowna: "19 maja 2026" (klasa miesiąca dopuszcza znak zastępczy OCR �).
 _DATA_SLOWNA = re.compile(
     r"(\d{1,2})\s+([A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ�]+)\s+(\d{4})"
 )
 
+# Data cyfrowa w nagłówku: DD-MM-YYYY / DD.MM.YYYY / DD/MM/YYYY oraz ISO YYYY-MM-DD.
+# Wymagamy separatorów i 4-cyfrowego roku, by nie łapać sygnatur (np. "126/25").
+_DATA_CYFROWA = re.compile(
+    r"(?<!\d)(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})(?!\d)"
+)
+_DATA_ISO = re.compile(r"(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
+
+
+def _valid_date(year: int, month: int, day: int) -> Optional[str]:
+    """Zwraca YYYY-MM-DD, gdy składowe tworzą sensowną datę, inaczej None."""
+    if 1 <= day <= 31 and 1 <= month <= 12 and 2000 <= year <= 2100:
+        return f"{year:04d}-{month:02d}-{day:02d}"
+    return None
+
 
 def _fallback_data_pisma(text: str) -> Optional[str]:
-    """Szuka daty SPORZĄDZENIA pisma w nagłówku (polska data słowna).
+    """Pierwsza data od góry = data SPORZĄDZENIA pisma. Zwraca YYYY-MM-DD lub None.
 
-    Skanuje tylko początek tekstu (nagłówek), by nie złapać dat z treści
-    (terminów, dat zgonu, dat faktur). Zwraca YYYY-MM-DD lub None.
+    Reguła pozycyjna: data sporządzenia/wysłania jest zawsze na początku pisma
+    (prawy górny róg, nagłówek lub pierwsze zdanie) — w dowolnym formacie:
+    cyfrowym ("13-04-2026", "13.04.2026"), ISO ("2026-04-13") lub słownym
+    ("13 kwietnia 2026"). Bierzemy NAJWCZEŚNIEJ występującą sensowną datę w oknie
+    nagłówka, więc daty z treści (raty, terminy, tabele kosztów) nie wchodzą w grę.
     """
-    head = text[:600]
+    head = text[:_HEAD_LEN]
+
+    # Zbierz kandydatów z trzech formatów wraz z pozycją wystąpienia w tekście.
+    candidates: list[tuple[int, str]] = []
+
+    for m in _DATA_ISO.finditer(head):
+        iso = _valid_date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if iso:
+            candidates.append((m.start(), iso))
+
+    for m in _DATA_CYFROWA.finditer(head):
+        iso = _valid_date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        if iso:
+            candidates.append((m.start(), iso))
+
     for m in _DATA_SLOWNA.finditer(head):
-        day = int(m.group(1))
         month = _MIESIACE.get(_ascii_month(m.group(2)))
-        year = int(m.group(3))
-        if month and 1 <= day <= 31 and 1900 <= year <= 2100:
-            return f"{year:04d}-{month:02d}-{day:02d}"
-    return None
+        if month:
+            iso = _valid_date(int(m.group(3)), month, int(m.group(1)))
+            if iso:
+                candidates.append((m.start(), iso))
+
+    if not candidates:
+        return None
+    # Pierwsza data idąc od góry (najmniejsza pozycja w tekście).
+    candidates.sort(key=lambda c: c[0])
+    return candidates[0][1]
 
 
 def _analyze_text(
@@ -252,9 +295,14 @@ def _analyze_text(
             strona_reprezentowana=_normalize(data.get("strona_reprezentowana")),
             strona_przeciwna=_normalize(data.get("strona_przeciwna")),
         )
-        # Fallback: gdy Claude nie podał daty, spróbuj wyłapać ją z nagłówka.
-        if result.data_pisma is None:
-            result.data_pisma = _fallback_data_pisma(text)
+        # Data sporządzenia = pierwsza data od góry (reguła pozycyjna). Ma
+        # PIERWSZEŃSTWO przed Claude: model myli się przy dokumentach z gęstwą
+        # dat w treści (tabele kosztów, raty) i bierze datę z treści zamiast
+        # nagłówka. Reguła patrzy na pozycję, nie na sens — i tu jest pewniejsza.
+        # Claude zostaje tylko gdy reguła nic nie znajdzie w oknie nagłówka.
+        head_date = _fallback_data_pisma(text)
+        if head_date is not None:
+            result.data_pisma = head_date
         return result
     except Exception as exc:  # noqa: BLE001 — błąd API nie może blokować aplikacji
         logger.warning("Analiza Claude nie powiodła się: %s", exc)

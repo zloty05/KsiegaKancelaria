@@ -53,9 +53,15 @@ anthropic 0.105 · openpyxl 3.1.5 · pywin32 312 · truststore 0.10.4 · pyinsta
   bo OCR psuje polskie znaki (Radców→Radc�w), a nazwiska przeżywają. Gdy niejednoznaczne →
   **oba pola null** (świadoma decyzja: nie zgadywać). Bez `nazwiska_radcow` w Ustawieniach
   rozpoznawanie nie zadziała.
-- **`data_pisma`** = data SPORZĄDZENIA (nagłówek przy miejscowości), NIE daty z treści
-  (terminy, daty zgonu/faktur). Prompt to wymusza; dodatkowo `_fallback_data_pisma`
-  (regex na polskie daty słowne „19 maja 2026", odporny na OCR) działa, gdy Claude da null.
+- **`data_pisma`** = data SPORZĄDZENIA/WYSŁANIA = **PIERWSZA data od góry** (prawy górny
+  róg, nagłówek lub pierwsze zdanie), NIE daty z treści (terminy, raty, tabele kosztów,
+  daty zgonu/faktur). Wyznacznikiem jest POZYCJA, nie format. `_fallback_data_pisma`
+  (regex) zbiera daty cyfrowe (`13-04-2026`, `13.04.2026`, `7/12/2025`), ISO (`2026-04-13`)
+  i słowne („19 maja 2026", odporne na OCR) z okna nagłówka (`_HEAD_LEN=500` znaków, by nie
+  sięgać treści), sortuje wg pozycji i bierze pierwszą. Ta reguła **NADPISUJE** datę z Claude
+  (nie tylko gdy null) — model mylił się przy gęstwie dat cyfrowych w treści (brał datę
+  z tabeli kosztów zamiast nagłówka). Daty cyfrowe wymagają separatorów + 4-cyfrowego roku,
+  by nie łapać sygnatur (`126/25`). Prompt też wymusza „pierwsza data od góry".
 - **Wcześniejsze nazwy pól** to `strona_powodowa`/`strona_pozwana` — w starych bazach
   migrowane automatycznie (patrz `init_db`, `ALTER TABLE RENAME COLUMN`).
 
@@ -152,6 +158,9 @@ Klucz API wysyłać OSOBNO (jak hasło). Windows/ESET ostrzeże o niepodpisanym 
 - ✅ v1.1: rozbicie stron (reprezentowana/przeciwna + rozpoznawanie po nazwiskach radców),
   lepsze wykrywanie dat (prompt + fallback słowny), scalanie stron + stop po komplecie,
   migracja bazy. Paczka przebudowana i przetestowana (start .exe OK).
+- ✅ v1.2: data_pisma = pierwsza data od góry (reguła pozycyjna nadpisuje Claude). Fallback
+  rozpoznaje teraz daty cyfrowe + ISO + słowne. Naprawia pisma komornicze z tabelami kosztów
+  (model brał datę z tabeli zamiast nagłówka). Sprawdzone na 5 plikach w `przykłady/`.
 - Możliwe później: certyfikat podpisywania kodu; instalator (Inno Setup) zamiast ZIP;
   fallback dat działa tylko gdy API odpowie — gdy całe wywołanie padnie (brak sieci),
   data nie jest wyciągana z OCR (do rozważenia, jeśli radca zgłosi).
